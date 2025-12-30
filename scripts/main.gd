@@ -3,15 +3,36 @@ extends Node2D
 var player: CharacterBody2D
 var camera: Camera2D
 var time_label: Label
-var background: ColorRect   # <-- Wichtig für Tag/Nacht
+var message_label: Label
+var background: ColorRect
 
-# Tageszeit in Minuten (0 = 00:00, 1440 = 24:00)
-var game_time: float = 480.0  # Start um 08:00 Uhr
+# Tageszeit in Minuten
+var game_time: float = 480.0  # Start um 08:00
 
-const TIME_SCALE = 60.0  # 1 echte Sekunde = 1 Spielminute (schnell zum Testen)
+const TIME_SCALE = 60.0  # 1 Sekunde = 1 Spielminute
+
+# Tasks
+var tasks = [
+	{
+		"name": "Kaffee kochen",
+		"position": Vector2(300, 200),
+		"color": Color(0.2, 0.6, 1.0),  # Blau
+		"completed": false,
+		"reward_text": "+ Energie! Du fühlst dich wach!"
+	},
+	{
+		"name": "Briefkasten leeren",
+		"position": Vector2(-400, -100),
+		"color": Color(1.0, 0.8, 0.2),  # Gelb
+		"completed": false,
+		"reward_text": "+ Post erledigt! Keine Rechnungen übersehen."
+	}
+]
+
+var task_objects = []  # Speichert die visuellen Quadrate
 
 func _ready():
-	# Großer grauer Boden
+	# Hintergrund
 	background = ColorRect.new()
 	background.color = Color(0.3, 0.3, 0.3, 1)
 	background.size = Vector2(10000, 10000)
@@ -35,13 +56,13 @@ func _ready():
 	collision.shape = shape
 	player.add_child(collision)
 	
-	# Kamera folgt Spieler
+	# Kamera
 	camera = Camera2D.new()
 	camera.enabled = true
 	camera.zoom = Vector2(0.8, 0.8)
 	player.add_child(camera)
 	
-	# HUD: Uhr oben links
+	# HUD
 	var hud = CanvasLayer.new()
 	add_child(hud)
 	
@@ -51,6 +72,23 @@ func _ready():
 	time_label.add_theme_color_override("font_color", Color(1, 1, 1))
 	time_label.position = Vector2(20, 20)
 	hud.add_child(time_label)
+	
+	message_label = Label.new()
+	message_label.text = ""
+	message_label.add_theme_font_size_override("font_size", 42)
+	message_label.add_theme_color_override("font_color", Color(1, 1, 0.5))
+	message_label.position = Vector2(20, 70)
+	message_label.modulate.a = 0  # Unsichtbar am Anfang
+	hud.add_child(message_label)
+	
+	# Task-Objekte erstellen
+	for task in tasks:
+		var obj = ColorRect.new()
+		obj.color = task.color
+		obj.size = Vector2(80, 80)
+		obj.position = task.position - Vector2(40, 40)
+		add_child(obj)
+		task_objects.append(obj)
 
 const SPEED = 400
 
@@ -69,24 +107,42 @@ func _physics_process(delta):
 	velocity = velocity.normalized() * SPEED
 	player.velocity = velocity
 	player.move_and_slide()
+	
+	# Interaktion mit E
+	if Input.is_action_just_pressed("interact"):
+		check_tasks()
+
+func check_tasks():
+	for i in range(tasks.size()):
+		var task = tasks[i]
+		if task.completed:
+			continue
+		
+		var dist = player.position.distance_to(task.position)
+		if dist < 100:  # Nah genug
+			task.completed = true
+			task_objects[i].color = Color(0.5, 0.5, 0.5)  # Grau = erledigt
+			show_message(task.reward_text)
+			break
+
+func show_message(text: String):
+	message_label.text = text
+	message_label.modulate.a = 1.0
+	await get_tree().create_timer(3.0).timeout
+	message_label.modulate.a = 0.0
 
 func _process(delta):
-	# Zeit vorlaufen lassen
 	game_time += delta * TIME_SCALE
-	
-	# Nach 24 Stunden zurücksetzen
 	if game_time >= 1440:
 		game_time -= 1440
 	
-	# Uhr aktualisieren
 	time_label.text = get_time_string()
 	
-	# Tag/Nacht-Wechsel
 	var hour = int(game_time / 60)
-	if hour >= 6 and hour < 18:  # 6:00 – 17:59 = Tag
-		background.color = Color(0.5, 0.5, 0.6, 1)  # Heller Tag
+	if hour >= 6 and hour < 18:
+		background.color = Color(0.5, 0.5, 0.6, 1)
 	else:
-		background.color = Color(0.1, 0.1, 0.15, 1)  # Dunkle Nacht
+		background.color = Color(0.1, 0.1, 0.15, 1)
 
 func get_time_string() -> String:
 	var hours = int(game_time / 60)
